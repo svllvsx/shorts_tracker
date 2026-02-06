@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+SESSION_LOG.md
+run_service.ps1
+1.png

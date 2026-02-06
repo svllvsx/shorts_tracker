@@ -1,0 +1,4 @@
+[app]
+refresh_interval_hours = 1
+max_videos_per_channel = 10
+instagram_cookie_file = "C:\\Data\\Soft\\yt-analytics\\data\\cookies\\instagram_cookies.txt"

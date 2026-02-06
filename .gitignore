@@ -1,0 +1,20 @@
+﻿# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual env
+.venv/
+
+# Local database
+yt_analytics.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Local runtime data
+data/cookies/
+app/static/avatars/
+
+# Local logs / notes
+SESSION_LOG.md

@@ -1,0 +1,775 @@
+{% extends "base.html" %}
+{% set title = t("title_dashboard") %}
+{% block content %}
+<div class="dashboard-layout">
+  <aside class="panel side-menu">
+    <a class="menu-link {% if section == 'overview' %}active{% endif %}" href="/dashboard?section=overview">{{ t("menu_overview") }}</a>
+    <a class="menu-link {% if section == 'charts' %}active{% endif %}" href="/dashboard?section=charts">{{ t("menu_charts") }}</a>
+    <a class="menu-link {% if section == 'settings' %}active{% endif %}" href="/dashboard?section=settings">{{ t("menu_settings") }}</a>
+    <a class="menu-link" href="/analytics/export.csv">{{ t("menu_export") }}</a>
+  </aside>
+
+  <div class="dashboard-main section-{{ section }}">
+    {% if msg %}
+      <div class="alert alert-dismissible success {% if msg_summary %}alert-summary{% endif %}" data-alert-block>
+        <button type="button" class="alert-close-left" data-alert-close aria-label="Close">×</button>
+        {% if msg_summary %}
+          <div class="alert-summary-title">{{ t("refresh_progress_done") }}</div>
+          <div class="alert-summary-grid">
+            <span>{{ t("summary_refreshed") }}: {{ msg_summary.refreshed }}</span>
+            <span>{{ t("summary_skipped") }}: {{ msg_summary.skipped }}</span>
+            <span>{{ t("summary_failed") }}: {{ msg_summary.failed }}</span>
+          </div>
+        {% else %}
+          <div class="alert-text">{{ msg }}</div>
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if error %}
+      <div class="alert alert-dismissible error" data-alert-block>
+        <button type="button" class="alert-close-left" data-alert-close aria-label="Close">×</button>
+        <div class="alert-text">{{ error }}</div>
+      </div>
+    {% endif %}
+
+    {% if section == "overview" %}
+      <section class="panel collapsible-panel" data-collapse-id="overview-main">
+        <h1>{{ t("add_channel") }}</h1>
+        <p class="muted">{{ t("refresh_interval", hours=settings.refresh_interval_hours, videos=settings.max_videos_per_channel) }}</p>
+
+        <form method="post" action="/channels/add" class="inline-form">
+          <input type="hidden" name="next_section" value="overview" />
+          <input type="text" name="channel_url" placeholder="{{ t('placeholder_channel_url') }}" required>
+          <button type="submit">{{ t("add_channel") }}</button>
+        </form>
+
+      </section>
+
+      {% if channel_24h_rows %}
+        <section class="panel stats24h-panel collapsible-panel" data-collapse-id="overview-24h">
+          <h2>{{ t("stats_24h_title") }}</h2>
+          <div class="stats24h-shell">
+            <button type="button" class="stats24h-left-hint" aria-label="Scroll left"><</button>
+            <div class="stats24h-strip hscroll">
+              {% for stat in channel_24h_rows %}
+                <article class="stats24h-item stats24h-platform-{{ stat.platform }}">
+                  <a href="{{ stat.channel.url }}" target="_blank" rel="noopener" class="avatar-link">
+                    {% if stat.channel.avatar_url %}
+                      <img src="{{ stat.channel.avatar_url }}" alt="Channel avatar" class="channel-avatar stats24h-avatar" loading="lazy" />
+                    {% else %}
+                      <div class="channel-avatar channel-avatar-fallback stats24h-avatar" aria-hidden="true">{{ t("no_image") }}</div>
+                    {% endif %}
+                  </a>
+                  <p class="stats24h-title">
+                    <span class="platform-badge {{ stat.platform }}">{{ stat.platform[0]|upper }}</span>
+                    <span>{{ stat.display_title }}</span>
+                  </p>
+                  <div class="stats24h-metrics">
+                    <span>{{ t("stats_24h_views_short") }}: {% if stat.has_delta %}{{ "{:+,}".format(stat.views_delta) }}{% else %}{{ t("stats_24h_no_data") }}{% endif %}</span>
+                    <span>{{ t("stats_24h_likes_short") }}: {% if stat.has_delta %}{{ "{:+,}".format(stat.likes_delta) }}{% else %}{{ t("stats_24h_no_data") }}{% endif %}</span>
+                    <span>{{ t("stats_24h_comments_short") }}: {% if stat.has_delta %}{{ "{:+,}".format(stat.comments_delta) }}{% else %}{{ t("stats_24h_no_data") }}{% endif %}</span>
+                    <span>{{ t("stats_24h_subscribers_short") }}: {% if stat.has_delta and stat.subscribers_delta is not none %}{{ "{:+,}".format(stat.subscribers_delta) }}{% else %}{{ t("stats_24h_no_data") }}{% endif %}</span>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+            <button type="button" class="stats24h-right-hint" aria-label="Scroll right">></button>
+          </div>
+        </section>
+      {% endif %}
+
+      {% if not grouped_rows %}
+        <section class="panel collapsible-panel" data-collapse-id="overview-empty">
+          <p>{{ t("no_channels") }}</p>
+        </section>
+      {% endif %}
+
+      {% for group in grouped_rows %}
+        <section class="panel collapsible-panel" data-collapse-id="overview-group-{{ group.key }}">
+          <h2 class="group-header-title">
+            <span class="group-header-main">
+              <span class="platform-badge {{ group.key }}">{{ group.key[0]|upper }}</span>
+              <span>{{ group.label }} ({{ group.channel_count }})</span>
+            </span>
+            <span class="panel-collapse-summary">
+              <span class="summary-metric">
+                <span>{{ t("views") }} {{ "{:,}".format(group.summary.views) }}</span>
+                {% if group.summary.views_delta is not none and group.summary.views_delta != 0 %}
+                  <span class="metric-delta">{{ "{:+,}".format(group.summary.views_delta) }}</span>
+                {% endif %}
+              </span>
+              <span class="summary-metric">
+                <span>{{ t("likes") }} {{ "{:,}".format(group.summary.likes) }}</span>
+                {% if group.summary.likes_delta is not none and group.summary.likes_delta != 0 %}
+                  <span class="metric-delta">{{ "{:+,}".format(group.summary.likes_delta) }}</span>
+                {% endif %}
+              </span>
+              <span class="summary-metric">
+                <span>{{ t("comments") }} {{ "{:,}".format(group.summary.comments) }}</span>
+                {% if group.summary.comments_delta is not none and group.summary.comments_delta != 0 %}
+                  <span class="metric-delta">{{ "{:+,}".format(group.summary.comments_delta) }}</span>
+                {% endif %}
+              </span>
+            </span>
+          </h2>
+          {% for row in group.rows %}
+            <article class="channel-card channel-tone-{{ (loop.index0 % 6) + 1 }}">
+              <div class="channel-head">
+                <div class="channel-meta">
+                  <div class="channel-avatar-wrap">
+                    <a href="{{ row.channel.url }}" target="_blank" rel="noopener" class="avatar-link">
+                      {% if row.channel.avatar_url %}
+                        <img src="{{ row.channel.avatar_url }}" alt="Channel avatar" class="channel-avatar" loading="lazy" />
+                      {% else %}
+                        <div class="channel-avatar channel-avatar-fallback" aria-hidden="true">{{ t("no_image") }}</div>
+                      {% endif %}
+                    </a>
+                  </div>
+                  <div>
+                    <h3>{{ row.display_title }}</h3>
+                    <a href="{{ row.channel.url }}" target="_blank" rel="noopener">{{ row.channel.url }}</a>
+                    <p class="muted">{{ t("last_refresh", value=(fmt_datetime(row.channel.last_refreshed_at) if row.channel.last_refreshed_at else t("never"))) }}</p>
+                    {% if row.channel.last_error %}
+                      <p class="alert error">{{ row.channel.last_error }}</p>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="channel-actions">
+                  <form method="post" action="/channels/{{ row.channel.id }}/refresh">
+                    <input type="hidden" name="next_section" value="overview" />
+                    <input type="hidden" name="force" value="1" />
+                    <button type="submit">{{ t("refresh") }}</button>
+                  </form>
+                </div>
+              </div>
+
+              <div class="metrics">
+                <article>
+                  <h4>{{ t("total_views") }}</h4>
+                  <p>{{ "{:,}".format(row.aggregates.total_views) }}</p>
+                  {% if row.aggregates.delta_total_views is not none and row.aggregates.delta_total_views != 0 %}
+                    <p class="metric-delta">{{ "{:+,}".format(row.aggregates.delta_total_views) }}</p>
+                  {% endif %}
+                </article>
+                <article>
+                  <h4>{{ t("average_views") }}</h4>
+                  <p>{{ "{:,}".format(row.aggregates.avg_views) }}</p>
+                  {% if row.aggregates.delta_avg_views is not none and row.aggregates.delta_avg_views != 0 %}
+                    <p class="metric-delta">{{ "{:+,}".format(row.aggregates.delta_avg_views) }}</p>
+                  {% endif %}
+                </article>
+                <article>
+                  <h4>{{ t("median_views") }}</h4>
+                  <p>{{ "{:,}".format(row.aggregates.median_views) }}</p>
+                  {% if row.aggregates.delta_median_views is not none and row.aggregates.delta_median_views != 0 %}
+                    <p class="metric-delta">{{ "{:+,}".format(row.aggregates.delta_median_views) }}</p>
+                  {% endif %}
+                </article>
+                <article>
+                  <h4>{{ t("top_video_views") }}</h4>
+                  <p>{{ "{:,}".format(row.aggregates.top_video_views) }}</p>
+                  {% if row.aggregates.delta_top_video_views is not none and row.aggregates.delta_top_video_views != 0 %}
+                    <p class="metric-delta">{{ "{:+,}".format(row.aggregates.delta_top_video_views) }}</p>
+                  {% endif %}
+                </article>
+              </div>
+
+              <h4>{{ t("latest_videos") }}</h4>
+              <div class="table-wrap hscroll">
+                <table class="sortable-video-table">
+                  <thead>
+                    <tr>
+                      <th>{{ t("preview") }}</th>
+                      <th><button type="button" class="sortable-th" data-col="1" data-type="text">{{ t("video_title") }}</button></th>
+                      <th><button type="button" class="sortable-th" data-col="2" data-type="date">{{ t("upload_date") }}</button></th>
+                      <th><button type="button" class="sortable-th" data-col="3" data-type="number">{{ t("views") }}</button></th>
+                      <th><button type="button" class="sortable-th" data-col="4" data-type="number">{{ t("likes") }}</button></th>
+                      <th><button type="button" class="sortable-th" data-col="5" data-type="number">{{ t("comments") }}</button></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  {% for video in row.videos %}
+                    <tr>
+                      <td>
+                        {% if video.thumbnail_url %}
+                          <img src="{{ video.thumbnail_url }}" alt="Video preview" class="video-thumb" loading="lazy" />
+                        {% else %}
+                          <span class="muted">-</span>
+                        {% endif %}
+                      </td>
+                      <td><a href="{{ video.url }}" target="_blank" rel="noopener">{{ video.title }}</a></td>
+                      <td class="date-cell">{{ fmt_date(video.upload_date) }}</td>
+                      <td>
+                        <div>{{ "{:,}".format(video.view_count or 0) }}</div>
+                        {% if video.view_delta is not none and video.view_delta != 0 %}
+                          <div class="metric-delta">{{ "{:+,}".format(video.view_delta) }}</div>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <div>{{ "{:,}".format(video.like_count or 0) if video.like_count is not none else "-" }}</div>
+                        {% if video.like_delta is not none and video.like_delta != 0 %}
+                          <div class="metric-delta">{{ "{:+,}".format(video.like_delta) }}</div>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <div>{{ "{:,}".format(video.comment_count or 0) if video.comment_count is not none else "-" }}</div>
+                        {% if video.comment_delta is not none and video.comment_delta != 0 %}
+                          <div class="metric-delta">{{ "{:+,}".format(video.comment_delta) }}</div>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% else %}
+                    <tr><td colspan="6">{{ t("no_videos") }}</td></tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          {% endfor %}
+        </section>
+      {% endfor %}
+
+      <section id="refresh-progress-panel" class="panel progress-floating-panel" hidden>
+        <h3>{{ t("refresh_progress_title") }}</h3>
+        <p id="refresh-progress-text" class="muted">{{ t("refresh_progress_wait") }}</p>
+        <div class="progress-track">
+          <div id="refresh-progress-bar" class="progress-fill" style="width: 0%"></div>
+        </div>
+      </section>
+
+      <button
+        type="button"
+        id="refresh-fab"
+        class="refresh-fab"
+        onclick="toggleGlobalRefresh()"
+        data-label-start="{{ t('global_refresh') }}"
+        data-label-stop="{{ t('global_refresh_stop') }}"
+      >{{ t("global_refresh") }}</button>
+    {% endif %}
+
+    {% if section == "charts" %}
+      <section class="panel collapsible-panel" data-collapse-id="charts-main">
+        <h1>{{ t("charts_title") }}</h1>
+        {% if not chart_rows_total %}
+          <p>{{ t("chart_no_data") }}</p>
+        {% else %}
+          <section class="chart-scene chart-scene-total">
+            <h3>{{ t("chart_total_views") }}</h3>
+            <div class="vchart-scroll hscroll">
+              <div class="vchart-grid" style="--chart-count: {{ chart_rows_total|length }};">
+              {% for row in chart_rows_total %}
+                <article class="vbar-wrap">
+                  <div class="vbar-value">{{ "{:,}".format(row.value) }}</div>
+                  <div class="vbar-plot">
+                    <div class="vbar chart-animated-fill platform-{{ row.platform }}" style="--bar-height: {{ row.height_pct }}%;"></div>
+                  </div>
+                  <div class="vbar-label">
+                    <span class="platform-badge {{ row.platform }}">{{ row.platform[0]|upper }}</span>
+                    <span>{{ row.display_title }}</span>
+                  </div>
+                </article>
+              {% endfor %}
+              </div>
+            </div>
+          </section>
+
+          <section class="chart-scene chart-scene-average">
+            <h3>{{ t("chart_average_views") }}</h3>
+            <div class="vchart-scroll hscroll">
+              <div class="vchart-grid" style="--chart-count: {{ chart_rows_avg|length }};">
+              {% for row in chart_rows_avg %}
+                <article class="vbar-wrap">
+                  <div class="vbar-value">{{ "{:,}".format(row.value) }}</div>
+                  <div class="vbar-plot">
+                    <div class="vbar chart-animated-fill platform-{{ row.platform }}" style="--bar-height: {{ row.height_pct }}%;"></div>
+                  </div>
+                  <div class="vbar-label">
+                    <span class="platform-badge {{ row.platform }}">{{ row.platform[0]|upper }}</span>
+                    <span>{{ row.display_title }}</span>
+                  </div>
+                </article>
+              {% endfor %}
+              </div>
+            </div>
+          </section>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if section == "settings" %}
+      <section class="panel collapsible-panel settings-panel-lite" data-collapse-id="settings-main">
+        <h1>{{ t("settings_title") }}</h1>
+        <div class="settings-layout">
+          <form method="post" action="/settings/update" class="settings-card settings-core-form" enctype="multipart/form-data">
+            <input type="hidden" name="next_section" value="settings" />
+            <div class="settings-grid">
+              <label>
+                {{ t("settings_refresh_interval") }}
+                <input type="number" name="refresh_interval_hours" min="1" max="168" value="{{ settings.refresh_interval_hours }}" required>
+              </label>
+              <label>
+                {{ t("settings_max_videos") }}
+                <input type="number" name="max_videos_per_channel" min="1" max="100" value="{{ settings.max_videos_per_channel }}" required>
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button type="submit">{{ t("save_settings") }}</button>
+            </div>
+          </form>
+
+          <div class="settings-card settings-cookie-card">
+            <label class="full-width">
+              {{ t("settings_instagram_cookie_file") }}
+              <input id="instagram-cookie-upload" type="file" name="instagram_cookie_upload" accept=".txt">
+            {% if cookie_file_name %}
+                <span id="cookie-file-current" class="muted">{{ t("settings_instagram_cookie_current", name=cookie_file_name) }}</span>
+              {% else %}
+                <span id="cookie-file-current" class="muted"></span>
+              {% endif %}
+              <span id="cookie-status-indicator" class="muted">{{ t("settings_cookie_status_loading") }}</span>
+            </label>
+            <form method="post" action="/settings/instagram-cookies/check" class="settings-actions">
+              <input type="hidden" name="next_section" value="settings" />
+              <button type="submit">{{ t("settings_check_instagram_cookies") }}</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+</div>
+<script>
+let refreshPollTimer = null;
+let activeRefreshJobId = null;
+let refreshStartInFlight = false;
+
+function setRefreshButtonState(isRunning) {
+  const btn = document.getElementById("refresh-fab");
+  if (!btn) {
+    return;
+  }
+  btn.classList.toggle("is-running", isRunning);
+  btn.textContent = isRunning ? (btn.dataset.labelStop || "Stop refresh") : (btn.dataset.labelStart || "Refresh all");
+}
+
+async function toggleGlobalRefresh() {
+  if (refreshStartInFlight) {
+    return;
+  }
+  if (activeRefreshJobId) {
+    await stopGlobalRefresh();
+    return;
+  }
+  await startGlobalRefresh(1);
+}
+
+async function startGlobalRefresh(force) {
+  const panel = document.getElementById("refresh-progress-panel");
+  const text = document.getElementById("refresh-progress-text");
+  const bar = document.getElementById("refresh-progress-bar");
+  if (!panel || !text || !bar) {
+    return;
+  }
+  refreshStartInFlight = true;
+  setRefreshButtonState(true);
+  panel.hidden = false;
+  text.textContent = "{{ t('refresh_progress_wait') }}";
+  bar.style.width = "2%";
+
+  const body = new URLSearchParams();
+  body.set("force", String(force));
+  body.set("next_section", "overview");
+
+  try {
+    const resp = await fetch("/channels/refresh-all/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!resp.ok) {
+      text.textContent = "{{ t('refresh_progress_start_failed') }}";
+      refreshStartInFlight = false;
+      setRefreshButtonState(false);
+      return;
+    }
+    const data = await resp.json();
+    if (!data.job_id) {
+      text.textContent = "{{ t('refresh_progress_invalid_start') }}";
+      refreshStartInFlight = false;
+      setRefreshButtonState(false);
+      return;
+    }
+    activeRefreshJobId = data.job_id;
+    refreshStartInFlight = false;
+    setRefreshButtonState(true);
+    pollRefreshJob(data.job_id, text, bar);
+  } catch (err) {
+    text.textContent = "{{ t('refresh_progress_start_failed') }}";
+    refreshStartInFlight = false;
+    setRefreshButtonState(false);
+  }
+}
+
+async function stopGlobalRefresh() {
+  if (!activeRefreshJobId) {
+    return;
+  }
+  const text = document.getElementById("refresh-progress-text");
+  try {
+    const resp = await fetch(`/jobs/${activeRefreshJobId}/stop`, { method: "POST" });
+    if (!resp.ok) {
+      if (text) text.textContent = "{{ t('refresh_progress_stop_failed') }}";
+      return;
+    }
+    if (text) text.textContent = "{{ t('refresh_progress_stopping') }}";
+  } catch (err) {
+    if (text) text.textContent = "{{ t('refresh_progress_stop_failed') }}";
+  }
+}
+
+function pollRefreshJob(jobId, textEl, barEl) {
+  if (refreshPollTimer) {
+    clearInterval(refreshPollTimer);
+  }
+  refreshPollTimer = setInterval(async () => {
+    try {
+      const resp = await fetch(`/jobs/${jobId}`);
+      if (!resp.ok) {
+        textEl.textContent = "Failed to fetch job progress";
+        clearInterval(refreshPollTimer);
+        return;
+      }
+      const job = await resp.json();
+      const done = Number(job.done || 0);
+      const total = Number(job.total || 0);
+      const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 5;
+      barEl.style.width = `${pct}%`;
+      if (job.cancel_requested && !job.finished) {
+        textEl.textContent = "{{ t('refresh_progress_stopping') }}";
+      } else {
+        textEl.textContent = `{{ t('refresh_progress_running') }}`.replace("{done}", String(done)).replace("{total}", String(total));
+      }
+
+      if (job.finished) {
+        barEl.style.width = "100%";
+        textEl.textContent = job.message || "{{ t('refresh_progress_done') }}";
+        clearInterval(refreshPollTimer);
+        refreshStartInFlight = false;
+        activeRefreshJobId = null;
+        setRefreshButtonState(false);
+        if (job.redirect_url) {
+          window.location.href = job.redirect_url;
+        }
+      }
+    } catch (err) {
+      textEl.textContent = "{{ t('refresh_progress_poll_failed') }}";
+      clearInterval(refreshPollTimer);
+      refreshStartInFlight = false;
+      activeRefreshJobId = null;
+      setRefreshButtonState(false);
+    }
+  }, 1200);
+}
+
+function parseSortValue(cellText, type) {
+  const text = (cellText || "").trim();
+  if (type === "number") {
+    const cleaned = text.replace(/,/g, "");
+    const num = Number(cleaned);
+    return Number.isFinite(num) ? num : Number.NEGATIVE_INFINITY;
+  }
+  if (type === "date") {
+    if (text === "-" || text === "") return Number.NEGATIVE_INFINITY;
+    const m = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (m) {
+      const d = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const y = Number(m[3]);
+      const tsRu = new Date(y, mo, d).getTime();
+      return Number.isFinite(tsRu) ? tsRu : Number.NEGATIVE_INFINITY;
+    }
+    const ts = Date.parse(text);
+    return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
+  }
+  return text.toLowerCase();
+}
+
+function initCollapsiblePanels() {
+  document.querySelectorAll(".collapsible-panel[data-collapse-id]").forEach((panel) => {
+    if (panel.dataset.collapseReady === "1") return;
+
+    const collapseId = panel.dataset.collapseId;
+    if (!collapseId) return;
+    const heading = Array.from(panel.children).find((node) => {
+      const tag = (node.tagName || "").toUpperCase();
+      return tag === "H1" || tag === "H2" || tag === "H3";
+    });
+    if (!heading) return;
+
+    const head = document.createElement("div");
+    head.className = "panel-collapse-head";
+    panel.insertBefore(head, heading);
+    head.appendChild(heading);
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "panel-collapse-toggle";
+    head.appendChild(toggle);
+
+    const body = document.createElement("div");
+    body.className = "panel-collapse-body";
+    while (head.nextSibling) {
+      body.appendChild(head.nextSibling);
+    }
+    panel.appendChild(body);
+
+    const storageKey = `collapse:${collapseId}`;
+    const applyState = (collapsed) => {
+      panel.classList.toggle("collapsed", collapsed);
+      toggle.textContent = collapsed ? "+" : "-";
+      toggle.setAttribute("aria-label", collapsed ? "Expand block" : "Collapse block");
+    };
+
+    applyState(localStorage.getItem(storageKey) === "1");
+    toggle.addEventListener("click", () => {
+      const next = !panel.classList.contains("collapsed");
+      applyState(next);
+      localStorage.setItem(storageKey, next ? "1" : "0");
+    });
+
+    panel.dataset.collapseReady = "1";
+  });
+}
+
+function updateFloatingLayout() {
+  const fab = document.querySelector(".refresh-fab");
+  const progressPanel = document.getElementById("refresh-progress-panel");
+  const main = document.querySelector(".dashboard-main");
+  if (!fab || !main) return;
+
+  fab.style.left = "";
+  fab.style.right = "";
+  fab.style.transform = "";
+  if (progressPanel) {
+    progressPanel.style.left = "";
+    progressPanel.style.right = "";
+    progressPanel.style.width = "";
+  }
+
+  if (window.matchMedia("(max-width: 1180px)").matches) {
+    return;
+  }
+
+  const mainRect = main.getBoundingClientRect();
+  const mainStyles = window.getComputedStyle(main);
+  const rightPadding = parseFloat(mainStyles.paddingRight || "0") || 0;
+  const blockRight = mainRect.right - rightPadding;
+
+  const rightEdge = window.innerWidth - 12;
+  const rightLaneWidth = Math.max(0, rightEdge - blockRight);
+  const fabCenterX = blockRight + rightLaneWidth / 2;
+  fab.style.left = `${Math.round(fabCenterX)}px`;
+  fab.style.right = "auto";
+  fab.style.transform = "translateX(-50%)";
+
+  if (progressPanel) {
+    const leftEdge = 12;
+    const freeLeftWidth = Math.max(0, mainRect.left - leftEdge - 12);
+    const targetWidth = Math.max(0, Math.min(360, Math.floor(freeLeftWidth)));
+    progressPanel.style.left = `${leftEdge}px`;
+    progressPanel.style.right = "auto";
+    progressPanel.style.width = `${targetWidth}px`;
+  }
+}
+
+function initHorizontalWheelScroll() {
+  if (document.body.dataset.hscrollWheelBound === "1") {
+    return;
+  }
+
+  document.addEventListener(
+    "wheel",
+    (evt) => {
+      const target = evt.target;
+      if (!(target instanceof Element)) return;
+      let el = target.closest(".hscroll");
+      if (!el) {
+        const statsPanel = target.closest(".stats24h-panel");
+        if (statsPanel) {
+          el = statsPanel.querySelector(".stats24h-strip");
+        }
+      }
+      if (!el) return;
+
+      const maxLeft = el.scrollWidth - el.clientWidth;
+      if (maxLeft <= 0) return;
+
+      let delta = Math.abs(evt.deltaY) >= Math.abs(evt.deltaX) ? evt.deltaY : evt.deltaX;
+      if (!delta) return;
+
+      // Normalize wheel units (pixels/lines/pages) and make horizontal scroll responsive.
+      if (evt.deltaMode === 1) {
+        delta *= 16;
+      } else if (evt.deltaMode === 2) {
+        delta *= el.clientHeight;
+      }
+      delta *= 1.25;
+
+      if (!delta) return;
+
+      const nextLeft = Math.max(0, Math.min(maxLeft, el.scrollLeft + delta));
+      if (Math.abs(nextLeft - el.scrollLeft) < 1) return;
+      evt.preventDefault();
+      el.scrollLeft = nextLeft;
+    },
+    { passive: false, capture: true }
+  );
+
+  document.body.dataset.hscrollWheelBound = "1";
+}
+
+function initStats24hRightHint() {
+  const shells = document.querySelectorAll(".stats24h-shell");
+  shells.forEach((shell) => {
+    const strip = shell.querySelector(".stats24h-strip");
+    const leftHint = shell.querySelector(".stats24h-left-hint");
+    const hint = shell.querySelector(".stats24h-right-hint");
+    if (!strip || !hint || !leftHint) return;
+
+    const updateHint = () => {
+      const hasOverflow = strip.scrollWidth - strip.clientWidth > 4;
+      const atStart = strip.scrollLeft <= 2;
+      const atEnd = strip.scrollLeft >= strip.scrollWidth - strip.clientWidth - 2;
+      hint.classList.toggle("is-hidden", !(hasOverflow && !atEnd));
+      leftHint.classList.toggle("is-hidden", !(hasOverflow && !atStart));
+    };
+
+    if (hint.dataset.bound !== "1") {
+      hint.addEventListener("click", () => {
+        strip.scrollBy({ left: Math.max(180, Math.floor(strip.clientWidth * 0.65)), behavior: "smooth" });
+      });
+      leftHint.addEventListener("click", () => {
+        strip.scrollBy({ left: -Math.max(180, Math.floor(strip.clientWidth * 0.65)), behavior: "smooth" });
+      });
+      strip.addEventListener("scroll", updateHint, { passive: true });
+      hint.dataset.bound = "1";
+      leftHint.dataset.bound = "1";
+    }
+
+    updateHint();
+  });
+}
+
+async function initCookieStatus() {
+  const el = document.getElementById("cookie-status-indicator");
+  if (!el) {
+    return;
+  }
+  try {
+    const resp = await fetch("/settings/instagram-cookies/status");
+    if (!resp.ok) {
+      el.textContent = "{{ t('settings_cookie_status_invalid') }}";
+      el.style.color = "#ef4444";
+      return;
+    }
+    const data = await resp.json();
+    el.textContent = data.message || "{{ t('settings_cookie_status_invalid') }}";
+    if (data.state === "ok") {
+      el.style.color = "#10b981";
+    } else if (data.state === "missing") {
+      el.style.color = "#94a3b8";
+    } else {
+      el.style.color = "#ef4444";
+    }
+  } catch (err) {
+    el.textContent = "{{ t('settings_cookie_status_invalid') }}";
+    el.style.color = "#ef4444";
+  }
+}
+
+async function initCookieAutoUpload() {
+  const input = document.getElementById("instagram-cookie-upload");
+  const statusEl = document.getElementById("cookie-status-indicator");
+  const currentFileEl = document.getElementById("cookie-file-current");
+  if (!input || !statusEl || input.dataset.bound === "1") {
+    return;
+  }
+  input.dataset.bound = "1";
+
+  input.addEventListener("change", async () => {
+    const file = input.files && input.files[0];
+    if (!file) {
+      return;
+    }
+    statusEl.textContent = "{{ t('settings_cookie_uploading') }}";
+    statusEl.style.color = "#38bdf8";
+
+    const body = new FormData();
+    body.append("instagram_cookie_upload", file);
+    try {
+      const resp = await fetch("/settings/instagram-cookies/upload", { method: "POST", body });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        statusEl.textContent = data.error || "{{ t('msg_settings_cookie_upload_failed') }}";
+        statusEl.style.color = "#ef4444";
+        return;
+      }
+      if (currentFileEl && data.current_file_label) {
+        currentFileEl.textContent = data.current_file_label;
+      }
+      await initCookieStatus();
+    } catch (err) {
+      statusEl.textContent = "{{ t('msg_settings_cookie_upload_failed') }}";
+      statusEl.style.color = "#ef4444";
+    }
+  });
+}
+
+initCollapsiblePanels();
+updateFloatingLayout();
+setRefreshButtonState(false);
+initHorizontalWheelScroll();
+initStats24hRightHint();
+initCookieStatus();
+initCookieAutoUpload();
+window.addEventListener("resize", updateFloatingLayout);
+window.addEventListener("resize", initStats24hRightHint);
+
+document.querySelectorAll("[data-alert-close]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const root = btn.closest("[data-alert-block]");
+    if (root) {
+      root.style.display = "none";
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("msg");
+    url.searchParams.delete("error");
+    window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+  });
+});
+
+document.querySelectorAll(".sortable-video-table").forEach((table) => {
+  const tbody = table.querySelector("tbody");
+  if (!tbody) return;
+
+  table.querySelectorAll(".sortable-th").forEach((btn) => {
+    btn.dataset.order = "desc";
+    btn.addEventListener("click", () => {
+      const col = Number(btn.dataset.col);
+      const type = btn.dataset.type || "text";
+      const nextOrder = btn.dataset.order === "asc" ? "desc" : "asc";
+      btn.dataset.order = nextOrder;
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+      rows.sort((a, b) => {
+        const av = parseSortValue(a.children[col]?.innerText || "", type);
+        const bv = parseSortValue(b.children[col]?.innerText || "", type);
+        if (av < bv) return nextOrder === "asc" ? -1 : 1;
+        if (av > bv) return nextOrder === "asc" ? 1 : -1;
+        return 0;
+      });
+      rows.forEach((row) => tbody.appendChild(row));
+    });
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="{{ lang or 'en' }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title or (t('brand') if t is defined else 'YT Analytics') }}</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="76x76" href="/static/favicons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/static/style.css?v=20260206_1345" />
+</head>
+<body data-theme="{{ theme or 'light' }}">
+  {% set next_target = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
+  <header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="/dashboard">{{ t('brand') if t is defined else 'YT Analytics' }}</a>
+      <div class="prefs">
+        <div class="switch-group">
+          <a class="switch-chip {% if (lang or 'en') == 'en' %}active{% endif %}" href="/preferences/lang/en?next={{ next_target|urlencode }}">EN</a>
+          <a class="switch-chip {% if (lang or 'en') == 'ru' %}active{% endif %}" href="/preferences/lang/ru?next={{ next_target|urlencode }}">RU</a>
+        </div>
+        <div class="switch-group">
+          {% if (theme or 'light') == 'dark' %}
+            <a class="switch-chip active" href="/preferences/theme/light?next={{ next_target|urlencode }}">{{ t('theme_toggle_to_light') if t is defined else 'Light' }}</a>
+          {% else %}
+            <a class="switch-chip" href="/preferences/theme/dark?next={{ next_target|urlencode }}">{{ t('theme_toggle_to_dark') if t is defined else 'Dark' }}</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

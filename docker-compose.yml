@@ -1,0 +1,14 @@
+services:
+  yt-analytics:
+    build: .
+    container_name: yt-analytics
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./yt_analytics.db:/app/yt_analytics.db
+      - ./settings.toml:/app/settings.toml
+      - ./data/cookies:/app/data/cookies
+      - ./app/static/avatars:/app/app/static/avatars
+    environment:
+      - TZ=Europe/Moscow

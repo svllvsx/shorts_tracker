@@ -1,0 +1,6 @@
+﻿fastapi==0.116.1
+uvicorn[standard]==0.35.0
+Jinja2==3.1.6
+sqlmodel==0.0.24
+yt-dlp==2026.2.4
+python-multipart==0.0.20
