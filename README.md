@@ -1,11 +1,11 @@
-﻿# yt-analytics
+﻿# Shorts Tracker
 
-Minimal FastAPI web app for public YouTube channel analytics using `yt-dlp` (no OAuth).
+FastAPI web app for public short-video channel analytics (YouTube, TikTok, Instagram) using `yt-dlp` and platform fallbacks.
 
 ## Features
 - FastAPI + Jinja2 templates
 - Landing page + dashboard
-- Add channels by URL (`https://www.youtube.com/@handle` also works)
+- Add channels by URL (`youtube.com`, `tiktok.com`, `instagram.com`)
 - Fetch and store latest N videos per channel in SQLite via SQLModel
 - Per channel aggregates:
   - total views (sum of stored videos)
@@ -13,12 +13,22 @@ Minimal FastAPI web app for public YouTube channel analytics using `yt-dlp` (no 
   - uploads per week over last 30 days
 - Per-channel refresh + global refresh
 - Cache guard: skips refresh when last refresh is less than configured interval (unless forced)
+- Instagram cookies upload + validation from Settings
+- Platform grouping and charts (total/average views by channel)
 - Friendly error messages for yt-dlp failures
 - Config via `settings.toml`
 
+## Screenshots
+
+![Dashboard](shots/1.png)
+![Charts](shots/2.png)
+![Settings](shots/3.png)
+![Mobile](shots/4.png)
+![Theme](shots/5.png)
+
 ## Project structure
 ```text
-yt-analytics/
+shorts-tracker/
   app/
     services/
       ytdlp_service.py
@@ -63,6 +73,6 @@ max_videos_per_channel = 12
 ```
 
 ## Notes
-- Data source is `yt-dlp` only.
+- Main data source is `yt-dlp` with platform-specific fallbacks for unstable endpoints.
 - Some channels/videos may not expose `like_count`; UI shows `-` in that case.
 - Database file is `yt_analytics.db` in project root.
