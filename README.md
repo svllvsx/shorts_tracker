@@ -4,19 +4,32 @@ FastAPI web app for public short-video channel analytics (YouTube, TikTok, Insta
 
 ## Features
 - FastAPI + Jinja2 templates
-- Landing page + dashboard
+- Dashboard with Overview / Charts / Settings
 - Add channels by URL (`youtube.com`, `tiktok.com`, `instagram.com`)
 - Fetch and store latest N videos per channel in SQLite via SQLModel
-- Per channel aggregates:
-  - total views (sum of stored videos)
+- Per-channel metrics:
+  - total views
   - average views
-  - uploads per week over last 30 days
-- Per-channel refresh + global refresh
-- Cache guard: skips refresh when last refresh is less than configured interval (unless forced)
+  - median views
+  - top video views
+- Delta metrics after refresh (channel/group/video level)
+- Per-channel refresh + global refresh all
+- Background refresh job with progress panel and stop action
+- Cache guard with forced refresh mode
 - Instagram cookies upload + validation from Settings
-- Platform grouping and charts (total/average views by channel)
-- Friendly error messages for yt-dlp failures
-- Config via `settings.toml`
+- Platform grouping and chart visualizations
+- CSV export endpoint (`/analytics/export.csv`)
+- RU/EN language switch + Light/Dark theme switch
+
+## Supported Platforms
+- YouTube
+- TikTok
+- Instagram
+
+Notes:
+- Main data source is `yt-dlp`.
+- For unstable platform endpoints, service-level fallbacks are used (especially for TikTok/Instagram scenarios).
+- Some channels/videos may not expose likes/comments consistently.
 
 ## Screenshots
 
@@ -39,28 +52,20 @@ docker compose logs -f
 Open:
 - http://127.0.0.1:8000/dashboard
 
-## Project structure
-```text
-shorts-tracker/
-  app/
-    services/
-      ytdlp_service.py
-    static/
-      style.css
-    templates/
-      base.html
-      index.html
-      dashboard.html
-    db.py
-    main.py
-    models.py
-    settings.py
-  settings.toml
-  requirements.txt
-  README.md
-```
+## Docker Deploy On Ubuntu VPS
 
-## Setup (Windows PowerShell)
+For full production-like deployment instructions see:
+- `DEPLOY_DOCKER_UBUNTU.md`
+
+Included there:
+- Docker installation on Ubuntu
+- Dockerfile + compose usage
+- Persistence strategy for DB/settings/cookies/avatars
+- Optional Nginx reverse proxy snippet
+- Update and backup commands
+
+## Local Setup (Windows PowerShell)
+
 ```powershell
 cd C:\Data\Soft\yt-analytics
 python -m venv .venv
@@ -68,7 +73,8 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Run
+Run:
+
 ```powershell
 uvicorn app.main:app --reload
 ```
@@ -77,15 +83,86 @@ Open in browser:
 - http://127.0.0.1:8000/
 - Dashboard: http://127.0.0.1:8000/dashboard
 
+## Project Structure
+
+```text
+shorts-tracker/
+  app/
+    services/
+      ytdlp_service.py
+    static/
+      style.css
+      avatars/
+      favicons/
+    templates/
+      base.html
+      index.html
+      dashboard.html
+    db.py
+    main.py
+    models.py
+    settings.py
+  data/
+    cookies/
+  settings.toml
+  yt_analytics.db
+  docker-compose.yml
+  Dockerfile
+  DEPLOY_DOCKER_UBUNTU.md
+  README.md
+```
+
 ## Settings
-Edit `settings.toml`:
+
+`settings.toml` example:
+
 ```toml
 [app]
 refresh_interval_hours = 6
 max_videos_per_channel = 12
+instagram_cookie_file = "data/cookies/instagram_cookies.txt"
 ```
 
-## Notes
-- Main data source is `yt-dlp` with platform-specific fallbacks for unstable endpoints.
-- Some channels/videos may not expose `like_count`; UI shows `-` in that case.
-- Database file is `yt_analytics.db` in project root.
+From UI Settings you can:
+- upload Instagram cookies file,
+- run cookie validation,
+- view live cookie status (valid/missing/invalid),
+- auto-upload cookies without manual page reload.
+
+## Data Persistence
+
+Runtime data that should not be lost:
+- `yt_analytics.db`
+- `settings.toml`
+- `data/cookies/`
+- `app/static/avatars/`
+
+These are already mounted in `docker-compose.yml`.
+
+## Export
+
+CSV export endpoint:
+- `GET /analytics/export.csv`
+
+Contains channel-level and video-level analytics columns for each tracked channel.
+
+## Security Notes
+
+- Do not commit cookies, DB, or local runtime cache into git.
+- `.gitignore` already excludes sensitive/local data (`data/cookies`, DB files, avatars, session log).
+
+## Troubleshooting
+
+- If Instagram fails:
+  - re-upload fresh cookies,
+  - verify cookies in Settings with the check button,
+  - retry refresh.
+- If refresh returns little/no data:
+  - it can be source-side limits/rate limits/platform changes.
+- If Docker container starts but app is unavailable:
+  - check `docker compose logs -f`.
+
+## License
+
+No explicit license file is included yet.
+If you plan public reuse, add a `LICENSE` file (for example MIT).
