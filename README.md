@@ -26,6 +26,19 @@ FastAPI web app for public short-video channel analytics (YouTube, TikTok, Insta
 ![Mobile](shots/4.png)
 ![Theme](shots/5.png)
 
+## Quick Start (Docker)
+
+```bash
+git clone https://github.com/svllvsx/shorts_tracker.git
+cd shorts_tracker
+mkdir -p data/cookies app/static/avatars && touch yt_analytics.db
+docker compose up -d --build
+docker compose logs -f
+```
+
+Open:
+- http://127.0.0.1:8000/dashboard
+
 ## Project structure
 ```text
 shorts-tracker/
