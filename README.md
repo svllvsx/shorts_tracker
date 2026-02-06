@@ -1,6 +1,6 @@
 ﻿# Shorts Tracker
 
-FastAPI web app for public short-video channel analytics (YouTube, TikTok, Instagram) using `yt-dlp` and platform fallbacks.
+FastAPI web app for public short-video channel analytics (YouTube, TikTok, Instagram) using `yt-dlp` and platform fallbacks. Data is collected without OAuth/API keys for YouTube/TikTok; Instagram uses cookies (not API keys).
 
 ## Features
 - FastAPI + Jinja2 templates
