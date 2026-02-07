@@ -333,6 +333,28 @@
               <button type="submit">{{ t("settings_check_instagram_cookies") }}</button>
             </form>
           </div>
+
+          <form method="post" action="/settings/telegram/update" class="settings-card settings-core-form">
+            <input type="hidden" name="next_section" value="settings" />
+            <h3>{{ t("settings_telegram_title") }}</h3>
+            <div class="settings-grid">
+              <label>
+                {{ t("settings_telegram_bot_username") }}
+                <input type="text" name="telegram_bot_username" value="{{ settings.telegram_bot_username }}" placeholder="my_bot" required>
+              </label>
+              <label>
+                {{ t("settings_telegram_bot_token") }}
+                <input type="password" name="telegram_bot_token" value="{{ settings.telegram_bot_token }}" placeholder="123456:ABC..." required>
+              </label>
+              <label>
+                {{ t("settings_telegram_allowed_user_id") }}
+                <input type="text" name="telegram_allowed_user_id" value="{{ settings.telegram_allowed_user_id }}" placeholder="123456789" required>
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button type="submit">{{ t("settings_save_telegram") }}</button>
+            </div>
+          </form>
         </div>
       </section>
     {% endif %}

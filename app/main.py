@@ -3,11 +3,14 @@ from __future__ import annotations
 import csv
 import http.cookiejar
 import io
+import hashlib
+import hmac
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urlencode, urlparse
 import urllib.request
 import urllib.error
 import re
@@ -22,7 +25,7 @@ from sqlmodel import Session, delete, func, select
 from app.db import engine, get_session, init_db
 from app.models import Channel, ChannelSnapshot, Video
 from app.services.ytdlp_service import YtDlpFetchError, fetch_channel_data
-from app.settings import settings, update_settings
+from app.settings import settings, update_settings, write_auth_env_settings
 
 app = FastAPI(title="YT Analytics")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -34,6 +37,9 @@ REFRESH_JOBS: dict[str, dict[str, Any]] = {}
 REFRESH_JOBS_LOCK = Lock()
 REFRESH_JOB_TTL_HOURS = 24
 REFRESH_JOB_MAX_STORED = 200
+AUTH_COOKIE_NAME = "tg_auth"
+AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+TELEGRAM_AUTH_MAX_AGE_SECONDS = 60 * 5
 
 SUPPORTED_LANGS = {"en", "ru"}
 SUPPORTED_THEMES = {"light", "dark"}
@@ -83,6 +89,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings_max_videos": "Latest videos per channel",
         "settings_instagram_cookie_file": "Instagram cookies file (.txt)",
         "settings_instagram_cookie_current": "Current file: {name}",
+        "settings_telegram_title": "Telegram access",
+        "settings_telegram_bot_username": "Telegram bot username",
+        "settings_telegram_bot_token": "Telegram bot token",
+        "settings_telegram_allowed_user_id": "Allowed Telegram user ID",
+        "settings_save_telegram": "Save Telegram access",
+        "msg_settings_telegram_saved": "Telegram access settings saved",
+        "msg_settings_telegram_invalid_user_id": "Allowed Telegram user ID must contain only digits",
+        "auth_login_title": "Sign in",
+        "auth_login_hint": "Authenticate with Telegram to access the dashboard.",
+        "auth_login_button": "Login with Telegram",
+        "auth_logout": "Logout",
+        "auth_config_missing": "Telegram login is not configured. Fill bot username, bot token, and allowed user ID in .env.",
+        "auth_denied": "Access denied for this Telegram account",
+        "auth_invalid_payload": "Telegram authentication verification failed",
         "msg_settings_cookie_upload_failed": "Failed to save Instagram cookies file",
         "settings_check_instagram_cookies": "Check cookies",
         "settings_cookie_status_loading": "Cookie status: checking...",
@@ -188,6 +208,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings_max_videos": "Последних видео на канал",
         "settings_instagram_cookie_file": "Путь к cookie-файлу Instagram (.txt)",
         "settings_instagram_cookie_current": "Текущий файл: {name}",
+        "settings_telegram_title": "Доступ Telegram",
+        "settings_telegram_bot_username": "Username Telegram бота",
+        "settings_telegram_bot_token": "Токен Telegram бота",
+        "settings_telegram_allowed_user_id": "Разрешенный Telegram user ID",
+        "settings_save_telegram": "Сохранить доступ Telegram",
+        "msg_settings_telegram_saved": "Настройки доступа Telegram сохранены",
+        "msg_settings_telegram_invalid_user_id": "Telegram user ID должен содержать только цифры",
+        "auth_login_title": "Вход",
+        "auth_login_hint": "Авторизуйтесь через Telegram, чтобы открыть панель.",
+        "auth_login_button": "Войти через Telegram",
+        "auth_logout": "Выйти",
+        "auth_config_missing": "Вход через Telegram не настроен. Укажите bot username, bot token и allowed user ID в .env.",
+        "auth_denied": "Доступ для этого Telegram аккаунта запрещен",
+        "auth_invalid_payload": "Проверка Telegram авторизации не пройдена",
         "msg_settings_cookie_upload_failed": "Не удалось сохранить cookie-файл Instagram",
         "video_sort_label": "Сортировать видео по",
         "video_sort_upload_date": "Дата загрузки",
@@ -266,6 +300,28 @@ def on_startup() -> None:
     init_db()
 
 
+@app.middleware("http")
+async def telegram_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if (
+        path.startswith("/static/")
+        or path == "/login"
+        or path == "/auth/telegram/callback"
+        or path == "/logout"
+        or path.startswith("/preferences/")
+    ):
+        return await call_next(request)
+
+    if _is_authenticated(request):
+        return await call_next(request)
+
+    next_path = request.url.path
+    if request.url.query:
+        next_path = f"{next_path}?{request.url.query}"
+    redirect_url = f"/login?{urlencode({'next': next_path})}"
+    return RedirectResponse(url=redirect_url, status_code=303)
+
+
 def _get_lang(request: Request) -> str:
     lang = (request.cookies.get("lang") or "en").lower()
     return lang if lang in SUPPORTED_LANGS else "en"
@@ -335,6 +391,98 @@ def _safe_next(next_url: str | None) -> str:
     if not next_url:
         return "/dashboard"
     return next_url if next_url.startswith("/") else "/dashboard"
+
+
+def _is_https_request(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    first_proto = forwarded_proto.split(",")[0].strip().lower() if forwarded_proto else ""
+    return first_proto == "https" or request.url.scheme == "https"
+
+
+def _telegram_auth_configured() -> bool:
+    return bool(
+        (settings.telegram_bot_token or "").strip()
+        and (settings.telegram_bot_username or "").strip()
+        and (settings.telegram_allowed_user_id or "").strip()
+    )
+
+
+def _telegram_verify_payload(payload: dict[str, str]) -> tuple[bool, str | None]:
+    provided_hash = (payload.get("hash") or "").strip()
+    if not provided_hash:
+        return False, None
+
+    bot_token = (settings.telegram_bot_token or "").strip()
+    if not bot_token:
+        return False, None
+
+    data_lines: list[str] = []
+    for key in sorted(payload.keys()):
+        if key in {"hash", "next"}:
+            continue
+        value = payload.get(key)
+        if value is None:
+            continue
+        data_lines.append(f"{key}={value}")
+    data_check_string = "\n".join(data_lines)
+    secret_key = hashlib.sha256(bot_token.encode("utf-8")).digest()
+    expected_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_hash, provided_hash):
+        return False, None
+
+    auth_date_raw = (payload.get("auth_date") or "").strip()
+    if not auth_date_raw.isdigit():
+        return False, None
+    auth_age = int(time.time()) - int(auth_date_raw)
+    if auth_age < 0 or auth_age > TELEGRAM_AUTH_MAX_AGE_SECONDS:
+        return False, None
+
+    user_id = (payload.get("id") or "").strip()
+    if not user_id.isdigit():
+        return False, None
+    return True, user_id
+
+
+def _auth_cookie_signature(payload: str) -> str:
+    secret = (settings.telegram_bot_token or "").strip()
+    return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _build_auth_cookie_value(user_id: str) -> str:
+    expires_at = int(time.time()) + AUTH_COOKIE_MAX_AGE
+    payload = f"{user_id}:{expires_at}"
+    signature = _auth_cookie_signature(payload)
+    return f"{payload}:{signature}"
+
+
+def _get_authenticated_user_id(request: Request) -> str | None:
+    raw = (request.cookies.get(AUTH_COOKIE_NAME) or "").strip()
+    if not raw:
+        return None
+
+    parts = raw.split(":")
+    if len(parts) != 3:
+        return None
+    user_id, expires_at_raw, provided_signature = parts
+    if not user_id.isdigit() or not expires_at_raw.isdigit():
+        return None
+    expires_at = int(expires_at_raw)
+    if expires_at < int(time.time()):
+        return None
+
+    payload = f"{user_id}:{expires_at}"
+    expected_signature = _auth_cookie_signature(payload)
+    if not hmac.compare_digest(expected_signature, provided_signature):
+        return None
+
+    allowed_user_id = (settings.telegram_allowed_user_id or "").strip()
+    if not allowed_user_id or user_id != allowed_user_id:
+        return None
+    return user_id
+
+
+def _is_authenticated(request: Request) -> bool:
+    return _get_authenticated_user_id(request) is not None
 
 
 def _dashboard_url(section: str, msg: str | None = None, error: str | None = None) -> str:
@@ -931,6 +1079,78 @@ def landing():
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+@app.get("/login")
+def login_page(request: Request, next: str | None = None, error: str | None = None):
+    lang = _get_lang(request)
+    theme = _get_theme(request)
+    if _is_authenticated(request):
+        return RedirectResponse(url=_safe_next(next), status_code=303)
+
+    login_error = error
+    if not _telegram_auth_configured():
+        login_error = _t(lang, "auth_config_missing")
+
+    callback_url = f"/auth/telegram/callback?{urlencode({'next': _safe_next(next)})}"
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "lang": lang,
+            "theme": theme,
+            "next_url": _safe_next(next),
+            "telegram_bot_username": (settings.telegram_bot_username or "").strip(),
+            "telegram_callback_url": callback_url,
+            "error": login_error,
+            "is_authenticated": False,
+            "t": lambda key, **kwargs: _t(lang, key, **kwargs),
+        },
+    )
+
+
+@app.get("/auth/telegram/callback")
+def auth_telegram_callback(request: Request, next: str | None = None):
+    lang = _get_lang(request)
+    safe_next = _safe_next(next)
+
+    if not _telegram_auth_configured():
+        return RedirectResponse(
+            url=f"/login?{urlencode({'next': safe_next, 'error': _t(lang, 'auth_config_missing')})}",
+            status_code=303,
+        )
+
+    payload = {key: value for key, value in request.query_params.items()}
+    ok, user_id = _telegram_verify_payload(payload)
+    if not ok or not user_id:
+        return RedirectResponse(
+            url=f"/login?{urlencode({'next': safe_next, 'error': _t(lang, 'auth_invalid_payload')})}",
+            status_code=303,
+        )
+
+    if user_id != (settings.telegram_allowed_user_id or "").strip():
+        return RedirectResponse(
+            url=f"/login?{urlencode({'next': safe_next, 'error': _t(lang, 'auth_denied')})}",
+            status_code=303,
+        )
+
+    response = RedirectResponse(url=safe_next, status_code=303)
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        _build_auth_cookie_value(user_id),
+        max_age=AUTH_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=_is_https_request(request),
+    )
+    return response
+
+
+@app.get("/logout")
+def logout(request: Request, next: str | None = None):
+    response = RedirectResponse(url=f"/login?{urlencode({'next': _safe_next(next)})}", status_code=303)
+    response.delete_cookie(AUTH_COOKIE_NAME)
+    return response
+
+
 @app.get("/preferences/lang/{lang_code}")
 def set_language(lang_code: str, next: str | None = None):
     lang = lang_code.lower()
@@ -1093,6 +1313,7 @@ def dashboard(
             "video_sort": current_video_sort,
             "video_order": current_video_order,
             "cookie_file_name": Path(_effective_instagram_cookie_file()).name if _effective_instagram_cookie_file() else "",
+            "is_authenticated": _is_authenticated(request),
             "t": lambda key, **kwargs: _t(lang, key, **kwargs),
             "fmt_date": _fmt_date_ru,
             "fmt_datetime": _fmt_datetime_ru,
@@ -1253,6 +1474,35 @@ def save_settings_route(
     settings.max_videos_per_channel = new_settings.max_videos_per_channel
     settings.instagram_cookie_file = new_settings.instagram_cookie_file
     return RedirectResponse(url=_dashboard_url(section, msg=_t(lang, "msg_settings_saved")), status_code=303)
+
+
+@app.post("/settings/telegram/update")
+def save_telegram_settings_route(
+    request: Request,
+    telegram_bot_username: str = Form(...),
+    telegram_bot_token: str = Form(...),
+    telegram_allowed_user_id: str = Form(...),
+    next_section: str = Form("settings"),
+):
+    lang = _get_lang(request)
+    section = _safe_section(next_section)
+    username = (telegram_bot_username or "").strip().lstrip("@")
+    token = (telegram_bot_token or "").strip()
+    allowed_user_id = (telegram_allowed_user_id or "").strip()
+
+    if not username or not token or not allowed_user_id:
+        return RedirectResponse(url=_dashboard_url(section, error=_t(lang, "auth_config_missing")), status_code=303)
+    if not allowed_user_id.isdigit():
+        return RedirectResponse(
+            url=_dashboard_url(section, error=_t(lang, "msg_settings_telegram_invalid_user_id")),
+            status_code=303,
+        )
+
+    write_auth_env_settings(username, token, allowed_user_id)
+    settings.telegram_bot_token = token
+    settings.telegram_bot_username = username
+    settings.telegram_allowed_user_id = allowed_user_id
+    return RedirectResponse(url=_dashboard_url(section, msg=_t(lang, "msg_settings_telegram_saved")), status_code=303)
 
 
 @app.post("/settings/instagram-cookies/check")

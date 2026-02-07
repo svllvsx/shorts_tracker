@@ -19,5 +19,10 @@ app/static/avatars/
 # Local logs / notes
 SESSION_LOG.md
 
+# Local secrets
+.env
+.env.*
+!.env.example
+
 # Windows explorer metadata
 **/desktop.ini

@@ -17,6 +17,7 @@ FastAPI web app for public short-video channel analytics (YouTube, TikTok, Insta
 - Background refresh job with progress panel and stop action
 - Cache guard with forced refresh mode
 - Instagram cookies upload + validation from Settings
+- Telegram authentication (Login Widget) with private access by allowed Telegram user ID
 - Platform grouping and chart visualizations
 - CSV export endpoint (`/analytics/export.csv`)
 - RU/EN language switch + Light/Dark theme switch
@@ -44,13 +45,14 @@ Notes:
 ```bash
 git clone https://github.com/svllvsx/shorts_tracker.git
 cd shorts_tracker
+cp .env.example .env
 mkdir -p data/cookies app/static/avatars && touch yt_analytics.db
 docker compose up -d --build
 docker compose logs -f
 ```
 
 Open:
-- http://127.0.0.1:8000/dashboard
+- http://127.0.0.1:18080/dashboard
 
 ## Docker Deploy On Ubuntu VPS
 
@@ -67,7 +69,7 @@ Included there:
 ## Local Setup (Windows PowerShell)
 
 ```powershell
-cd C:\Data\Soft\yt-analytics
+cd C:\Data\Soft\shorts-tracker
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -123,11 +125,26 @@ max_videos_per_channel = 12
 instagram_cookie_file = "data/cookies/instagram_cookies.txt"
 ```
 
+`Telegram` secrets should be set in `.env` (root), not in `settings.toml`:
+
+```env
+TELEGRAM_BOT_USERNAME=your_bot_username
+TELEGRAM_BOT_TOKEN=123456789:replace_with_real_token
+TELEGRAM_ALLOWED_USER_ID=123456789
+TZ=Europe/Moscow
+```
+
 From UI Settings you can:
 - upload Instagram cookies file,
 - run cookie validation,
 - view live cookie status (valid/missing/invalid),
 - auto-upload cookies without manual page reload.
+
+Telegram authorization:
+- all app routes are protected and redirect to `/login` when not authenticated;
+- sign-in uses Telegram Login Widget;
+- access is restricted to one configured `TELEGRAM_ALLOWED_USER_ID`;
+- Telegram credentials are stored in `.env` (not in `settings.toml`).
 
 ## Data Persistence
 
@@ -149,7 +166,7 @@ Contains channel-level and video-level analytics columns for each tracked channe
 ## Security Notes
 
 - Do not commit cookies, DB, or local runtime cache into git.
-- `.gitignore` already excludes sensitive/local data (`data/cookies`, DB files, avatars, session log).
+- `.gitignore` already excludes sensitive/local data (`.env`, `data/cookies`, DB files, avatars, session log).
 
 ## Troubleshooting
 

@@ -11,6 +11,7 @@ This guide is for deploying this project as a Docker container on Ubuntu (22.04/
 Important:
 - SQLite file (`yt_analytics.db`) and `settings.toml` should be persisted via Docker volumes/bind mounts.
 - Avatar cache is written to `app/static/avatars`, so persist it too.
+- Telegram auth secrets should be stored in `.env` (do not commit `.env` to git).
 
 ## 2. Prepare VPS
 
@@ -103,6 +104,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 mkdir -p data/cookies
 mkdir -p app/static/avatars
 touch yt_analytics.db
+cp .env.example .env
 ```
 
 Optional: if you already have DB/cookies from Windows, copy:
@@ -126,8 +128,19 @@ services:
       - ./settings.toml:/app/settings.toml
       - ./data/cookies:/app/data/cookies
       - ./app/static/avatars:/app/app/static/avatars
+    env_file:
+      - .env
     environment:
-      - TZ=Europe/Moscow
+      - TZ=${TZ:-Europe/Moscow}
+```
+
+Create `.env` in project root (example):
+
+```env
+TELEGRAM_BOT_USERNAME=your_bot_username
+TELEGRAM_BOT_TOKEN=123456789:replace_with_real_token
+TELEGRAM_ALLOWED_USER_ID=123456789
+TZ=Europe/Moscow
 ```
 
 ## 8. Build + Run
@@ -139,7 +152,7 @@ docker compose logs -f
 ```
 
 Check:
-- `http://SERVER_IP:8000/dashboard`
+- `http://SERVER_IP:18080/dashboard`
 
 ## 9. Optional Nginx Reverse Proxy + Domain
 
@@ -184,6 +197,7 @@ docker compose logs -f
 Backup these files/folders:
 - `yt_analytics.db`
 - `settings.toml`
+- `.env`
 - `data/cookies/`
 - `app/static/avatars/`
 
@@ -191,7 +205,7 @@ Quick backup command:
 
 ```bash
 tar -czf yt-analytics-backup-$(date +%F_%H-%M).tar.gz \
-  yt_analytics.db settings.toml data/cookies app/static/avatars
+  yt_analytics.db settings.toml .env data/cookies app/static/avatars
 ```
 
 ## 12. Common Issues

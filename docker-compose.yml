@@ -4,11 +4,13 @@ services:
     container_name: yt-analytics
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:18080:8000"
     volumes:
       - ./yt_analytics.db:/app/yt_analytics.db
       - ./settings.toml:/app/settings.toml
       - ./data/cookies:/app/data/cookies
       - ./app/static/avatars:/app/app/static/avatars
+    env_file:
+      - .env
     environment:
-      - TZ=Europe/Moscow
+      - TZ=${TZ:-Europe/Moscow}

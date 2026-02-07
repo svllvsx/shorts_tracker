@@ -5,13 +5,13 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -Path $PSScriptRoot
 
-$uvicorn = Join-Path $PSScriptRoot '.venv\Scripts\uvicorn.exe'
-if (-not (Test-Path $uvicorn)) {
-    throw "uvicorn not found at $uvicorn"
+$python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+if (-not (Test-Path $python)) {
+    throw "python not found at $python"
 }
 
 if ($Reload) {
-    & $uvicorn app.main:app --reload
+    & $python -m uvicorn app.main:app --reload
 } else {
-    & $uvicorn app.main:app
+    & $python -m uvicorn app.main:app
 }

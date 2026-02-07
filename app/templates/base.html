@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicons/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/static/favicons/favicon-16x16.png" />
   <link rel="apple-touch-icon" sizes="76x76" href="/static/favicons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="/static/style.css?v=20260206_1345" />
+  <link rel="stylesheet" href="/static/style.css?v=20260207_telegram_auth" />
 </head>
 <body data-theme="{{ theme or 'light' }}">
   {% set next_target = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
@@ -26,6 +26,11 @@
             <a class="switch-chip" href="/preferences/theme/dark?next={{ next_target|urlencode }}">{{ t('theme_toggle_to_dark') if t is defined else 'Dark' }}</a>
           {% endif %}
         </div>
+        {% if is_authenticated %}
+          <div class="switch-group">
+            <a class="switch-chip" href="/logout?next={{ next_target|urlencode }}">{{ t('auth_logout') if t is defined else 'Logout' }}</a>
+          </div>
+        {% endif %}
       </div>
     </div>
   </header>
