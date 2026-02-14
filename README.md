@@ -181,5 +181,5 @@ Contains channel-level and video-level analytics columns for each tracked channe
 
 ## License
 
-No explicit license file is included yet.
-If you plan public reuse, add a `LICENSE` file (for example MIT).
+This project is licensed under the MIT License.
+See `LICENSE` for details.
